@@ -6,6 +6,7 @@ import hmac
 import json
 import logging
 import os
+import socket
 import socketserver
 import urllib.parse
 from http import server
@@ -182,6 +183,13 @@ class Handler(server.BaseHTTPRequestHandler):
         self.send_header("Pragma", "no-cache")
         self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=FRAME")
         self.end_headers()
+        # Small send buffer: if Wi-Fi is slower than the stream, writes block and we skip to the
+        # newest frame, instead of old frames piling up in the network buffer (growing delay).
+        try:
+            self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, C.STREAM_SEND_BUFFER)
+            self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError as e:
+            logging.info("Could not shrink stream buffer: %s", e)
         try:
             while True:
                 with output.condition:

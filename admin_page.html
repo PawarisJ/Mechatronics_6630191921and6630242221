@@ -243,6 +243,10 @@ poll();
       if (r.ok && (down || !cam.naturalWidth) && Date.now() - last > 3000) { down = false; reload(); }
     } catch (e) { down = true; }
   }, 2000);
+  // Fresh stream every 5 minutes: clears any delay that built up while the page was open.
+  setInterval(() => { if (!down && !document.hidden) reload(); }, 5 * 60 * 1000);
+  // Coming back to a hidden tab: reconnect so it does not show old frames.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) reload(); });
 })();
 </script>
 </body>

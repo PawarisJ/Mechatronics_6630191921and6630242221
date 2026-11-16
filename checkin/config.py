@@ -10,6 +10,7 @@ PORT = 8000
 RESOLUTION = (1280, 720)     # browser video (~12.7 Mbit/s per viewer at 30 fps)
 CAMERA_FPS = 30
 STREAM_BITRATE = None        # None = encoder default quality (960x540/15 fps/3 Mbit/s was tried, user preferred this)
+STREAM_SEND_BUFFER = 64 * 1024  # bytes per viewer socket (Linux doubles it ~= 2 frames): stops delay building up
 DETECT_SIZE = (640, 360)     # small frames sent to the vision workers, for speed
 USER_PAGE_FILE = os.path.join(BASE_DIR, "user_page.html")    # pages are re-read on every request,
 ADMIN_PAGE_FILE = os.path.join(BASE_DIR, "admin_page.html")  # so they can change without a restart
