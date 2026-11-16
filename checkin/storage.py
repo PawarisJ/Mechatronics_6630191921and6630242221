@@ -26,6 +26,54 @@ def append_csv(path, header, row):
         w.writerow(row)
 
 
+def ensure_header(path, header):
+    """Files written before a column was added keep their old header line: rewrite just that line
+    (old rows stay as they are; csv.DictReader gives the missing columns as None)."""
+    try:
+        with open(path, newline="", encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return
+    want = ",".join(header) + "\r\n"
+    if not lines or lines[0].rstrip("\r\n") == want.rstrip("\r\n"):
+        return
+    lines[0] = want
+    tmp = path + ".tmp"
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
+        f.writelines(lines)
+    os.replace(tmp, path)
+
+
+class Schedule:
+    """The on-time cutoff ("HH:MM", set on the admin page). Check-ins earlier than it are On time."""
+
+    def __init__(self):
+        self.late_after = C.DEFAULT_LATE_AFTER
+        try:
+            with open(C.SCHEDULE_FILE, encoding="utf-8") as f:
+                value = json.load(f).get("late_after", "")
+            if C.TIME_RE.match(value):
+                self.late_after = value
+        except (OSError, ValueError, AttributeError):
+            pass  # missing or broken file: keep the default
+
+    def set(self, hhmm):
+        if not isinstance(hhmm, str) or not C.TIME_RE.match(hhmm):
+            raise ValueError("Use a time like 08:00")
+        os.makedirs(os.path.dirname(C.SCHEDULE_FILE), exist_ok=True)
+        tmp = C.SCHEDULE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"late_after": hhmm, "changed": datetime.datetime.now().isoformat(timespec="seconds")}, f)
+        os.replace(tmp, C.SCHEDULE_FILE)
+        self.late_after = hhmm
+
+    def status(self, when):
+        return C.ON_TIME if when.strftime("%H:%M") < self.late_after else C.LATE
+
+    def late_now(self):
+        return self.status(datetime.datetime.now()) == C.LATE
+
+
 class SheetSender:
     """Posts events to the Google Apps Script web app in the background."""
 
@@ -54,7 +102,7 @@ class SheetSender:
                 # Apps Script can take 20+ s on a cold start, so wait generously
                 with urllib.request.urlopen(req, timeout=90) as resp:
                     reply = resp.read().decode("utf-8", "replace")
-                if event.get("type") == "access" and '"version":3' not in reply.replace(" ", ""):
+                if event.get("type") == "access" and '"version":4' not in reply.replace(" ", ""):
                     self.status = "update Apps Script"
                 else:
                     self.status = "ok"
@@ -68,14 +116,17 @@ class AccessLog:
 
     def __init__(self, sheet):
         self.sheet = sheet
+        ensure_header(C.ACCESS_CSV, C.ACCESS_HEADER)
 
-    def log(self, person, blink, password, result):
-        t = datetime.datetime.now()
+    def log(self, person, blink, password, result, status="-", when=None):
+        """status: "On time" / "Late" for a granted check-in, "-" for every other attempt."""
+        t = when or datetime.datetime.now()
         row = [t.strftime("%Y-%m-%d"), t.strftime("%H:%M:%S"), person["id"], person["name"],
-               round(person["sim"] * 100), blink, password, result]
+               round(person["sim"] * 100), blink, password, result, status]
         append_csv(C.ACCESS_CSV, C.ACCESS_HEADER, row)
         self.sheet.send({"type": "access", "date": row[0], "time": row[1], "employee_id": row[2], "name": row[3],
-                         "face_match": row[4], "blink": blink, "password": password, "result": result})
+                         "face_match": row[4], "blink": blink, "password": password, "result": result,
+                         "status": status})
 
 
 class FaceDB:
@@ -177,11 +228,12 @@ class AccessCode:
 class Attendance:
     """Today's check-ins (first successful check-in of the day), kept in ~/attendance_log.csv."""
 
-    HEADER = ["date", "time", "employee_id", "name", "status", "similarity", "device"]
+    HEADER = ["date", "time", "employee_id", "name", "status", "similarity", "device", "timing"]
 
     def __init__(self):
+        ensure_header(C.ATTENDANCE_CSV, self.HEADER)
         self.date = None
-        self.today = {}  # id -> {"id", "name", "check_in", "last_seen"}
+        self.today = {}  # id -> {"id", "name", "check_in", "last_seen", "timing"}
         self._roll_day()
 
     def _roll_day(self):
@@ -196,28 +248,30 @@ class Attendance:
                         continue
                     if row["status"] == "Check-in" and row["employee_id"] not in self.today:
                         self.today[row["employee_id"]] = {"id": row["employee_id"], "name": row["name"],
-                                                          "check_in": row["time"], "last_seen": None}
+                                                          "check_in": row["time"], "last_seen": None,
+                                                          "timing": row.get("timing") or ""}
                     elif row["status"] == C.RESET_STATUS:
                         self.today.pop(row["employee_id"], None)
         except FileNotFoundError:
             pass
 
     def touch(self, pid):
-        """Update 'last seen'; returns today's check-in time or None if not checked in yet."""
+        """Update 'last seen'; returns a copy of today's check-in record, or None if not checked in yet."""
         self._roll_day()
         rec = self.today.get(pid)
         if rec:
             rec["last_seen"] = datetime.datetime.now().strftime("%H:%M:%S")
-            return rec["check_in"]
+            return dict(rec)
         return None
 
-    def check_in(self, pid, name, sim):
+    def check_in(self, pid, name, sim, when, timing):
+        """when: the moment the code was accepted; timing: "On time" / "Late", decided by the flow."""
         self._roll_day()
-        now = datetime.datetime.now().strftime("%H:%M:%S")
         if pid in self.today:
             return self.today[pid]
-        rec = self.today[pid] = {"id": pid, "name": name, "check_in": now, "last_seen": now}
-        self._log(now, pid, name, "Check-in", sim)
+        now = when.strftime("%H:%M:%S")
+        rec = self.today[pid] = {"id": pid, "name": name, "check_in": now, "last_seen": now, "timing": timing}
+        self._log(now, pid, name, "Check-in", sim, timing)
         return rec
 
     def reset(self, pid=None):
@@ -237,9 +291,9 @@ class Attendance:
         self._roll_day()
         self._log(datetime.datetime.now().strftime("%H:%M:%S"), pid, name, "Denied (wrong code)", sim)
 
-    def _log(self, now, pid, name, status, sim):
+    def _log(self, now, pid, name, status, sim, timing=""):
         append_csv(C.ATTENDANCE_CSV, self.HEADER,
-                   [self.date, now, pid, name, status, round(sim * 100), socket.gethostname()])
+                   [self.date, now, pid, name, status, round(sim * 100), socket.gethostname(), timing])
 
     def listing(self):
         self._roll_day()

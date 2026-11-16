@@ -30,7 +30,9 @@
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
   .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
   form { display: grid; grid-template-columns: 1fr 1.6fr auto; gap: 8px; align-items: end; }
-  #codeForm { grid-template-columns: 1fr auto; max-width: 360px; }
+  #codeForm, #schedForm { grid-template-columns: 1fr auto; max-width: 360px; }
+  #schedForm { margin-top: 14px; }
+  .ontime { color: var(--green); font-weight: 600; } .late { color: var(--yellow); font-weight: 600; }
   @media (max-width: 520px) { form { grid-template-columns: 1fr; } }
   label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); }
   input { background: #0d0d0f; border: 1px solid var(--line); color: var(--fg); border-radius: 6px;
@@ -77,6 +79,12 @@
           title="Exactly 3 digits, each 0-5, e.g. 324"></label>
         <button>Save code</button>
       </form>
+      <form id="schedForm">
+        <label>Late after (check-ins from this time are marked Late)<input id="lateAfter" required type="time"
+          step="60"></label>
+        <button>Save time</button>
+      </form>
+      <div id="schedState" class="muted" style="font-size:.9rem;margin-top:6px"></div>
     </div>
     <div class="panel">
       <h2>Register a person</h2>
@@ -96,7 +104,7 @@
       <div class="row"><h2>Today's attendance <span id="today" class="muted" style="font-weight:400"></span></h2>
         <div class="row"><span id="presentCount" class="muted" style="font-size:.9rem"></span>
           <button id="resetAll" class="ghost">Reset all</button></div></div>
-      <table><thead><tr><th>ID</th><th>Name</th><th>Check-in</th><th>Last seen</th><th></th></tr></thead>
+      <table><thead><tr><th>ID</th><th>Name</th><th>Check-in</th><th>Status</th><th>Last seen</th><th></th></tr></thead>
         <tbody id="attBody"></tbody></table>
     </div>
     <div class="panel">
@@ -190,7 +198,11 @@ async function poll() {
     $('resetAll').disabled = !s.today.length;
     // Rebuild rows only when who is checked in changes (so Reset buttons stay clickable);
     // "last seen" changes every second while someone is in view, so it is updated in place.
-    const key = JSON.stringify(s.today.map(a => [a.id, a.check_in]));
+    if (s.late_after && document.activeElement !== $('lateAfter') && $('lateAfter').dataset.saved !== s.late_after) {
+      $('lateAfter').value = $('lateAfter').dataset.saved = s.late_after;
+      $('schedState').textContent = 'Before ' + s.late_after + ' = On time, from ' + s.late_after + ' = Late';
+    }
+    const key = JSON.stringify(s.today.map(a => [a.id, a.check_in, a.timing]));
     if (key !== todayKey) {
       todayKey = key;
       lastSeenCells = {};
@@ -201,8 +213,10 @@ async function poll() {
         const seen = el('td', {});
         lastSeenCells[a.id] = seen;
         return el('tr', {}, el('td', { textContent: a.id }), el('td', { textContent: a.name }),
-          el('td', { textContent: a.check_in }), seen, el('td', {}, btn));
-      }) : [el('tr', {}, el('td', { colSpan: 5, className: 'muted', textContent: 'No check-ins yet today.' }))]));
+          el('td', { textContent: a.check_in }),
+          el('td', { textContent: a.timing || '—', className: a.timing === 'Late' ? 'late' : a.timing ? 'ontime' : '' }),
+          seen, el('td', {}, btn));
+      }) : [el('tr', {}, el('td', { colSpan: 6, className: 'muted', textContent: 'No check-ins yet today.' }))]));
     }
     for (const a of s.today) if (lastSeenCells[a.id]) lastSeenCells[a.id].textContent = a.last_seen || '—';
     if (s.people_version !== peopleVersion) { peopleVersion = s.people_version; await loadPeople(); }
@@ -221,6 +235,15 @@ $('codeForm').onsubmit = async ev => {
   catch (e) { alert(e.message); }
 };
 
+$('schedForm').onsubmit = async ev => {
+  ev.preventDefault();
+  const t = $('lateAfter').value.slice(0, 5);
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) return alert('Enter a time like 08:00.');
+  try { await api('/api/set_schedule', { late_after: t }); $('lateAfter').dataset.saved = ''; $('lateAfter').blur();
+        alert('Saved: check-ins from ' + t + ' are Late.'); }
+  catch (e) { alert(e.message); }
+};
+
 $('regForm').onsubmit = async ev => {
   ev.preventDefault();
   try {
@@ -233,13 +256,13 @@ poll();
 <script>
 /* Camera auto-reconnect: if the Pi was booting or restarted, reload the stream once it is back. */
 (function () {
-  const cam = document.getElementById(cam);
+  const cam = document.getElementById('cam');
   let down = false, last = 0;
-  function reload() { last = Date.now(); cam.src = /stream.mjpg?t= + last; }
-  cam.addEventListener(error, () => { down = true; setTimeout(reload, 2000); });
+  function reload() { last = Date.now(); cam.src = '/stream.mjpg?t=' + last; }
+  cam.addEventListener('error', () => { down = true; setTimeout(reload, 2000); });
   setInterval(async () => {
     try {
-      const r = await fetch(/status.json, { cache: no-store });
+      const r = await fetch('/status.json', { cache: 'no-store' });
       if (r.ok && (down || !cam.naturalWidth) && Date.now() - last > 3000) { down = false; reload(); }
     } catch (e) { down = true; }
   }, 2000);

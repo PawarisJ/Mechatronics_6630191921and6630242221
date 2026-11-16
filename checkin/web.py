@@ -12,6 +12,7 @@ import urllib.parse
 from http import server
 
 from . import config as C
+from .storage import Attendance
 
 ADMIN_PATHS = ("/admin", "/api/", "/photos/", "/attendance.csv", "/access_log.csv")
 
@@ -82,6 +83,7 @@ class Handler(server.BaseHTTPRequestHandler):
             s.update(app.faces.snapshot())
             s.update(app.flow.snapshot())
             s["sheet"] = app.sheet.status
+            s["schedule"] = {"late_after": app.schedule.late_after, "late_now": app.schedule.late_now()}
             if s["stage"] not in ("face", "blink"):  # paused step: don't draw stale results
                 s["faces"] = []
             if s["stage"] != "code":
@@ -105,7 +107,9 @@ class Handler(server.BaseHTTPRequestHandler):
         if path in ("/admin", "/admin/"):
             self._page(C.ADMIN_PAGE_FILE)
         elif path == "/api/admin_status.json":
-            self._json(faces.admin_snapshot())
+            s = faces.admin_snapshot()
+            s["late_after"] = self.app.schedule.late_after
+            self._json(s)
         elif path == "/api/people":
             self._json(faces.people())
         elif path.startswith("/photos/") and path.endswith(".jpg"):
@@ -117,7 +121,7 @@ class Handler(server.BaseHTTPRequestHandler):
             else:
                 self.send_error(404)
         elif path in ("/attendance.csv", "/access_log.csv"):
-            src, empty = ((C.ATTENDANCE_CSV, "date,time,employee_id,name,status,similarity,device\n")
+            src, empty = ((C.ATTENDANCE_CSV, ",".join(Attendance.HEADER) + "\n")
                           if path == "/attendance.csv" else (C.ACCESS_CSV, ",".join(C.ACCESS_HEADER) + "\n"))
             try:
                 with open(src, "rb") as f:
@@ -160,6 +164,12 @@ class Handler(server.BaseHTTPRequestHandler):
                 return self._json({"error": "The code must be exactly 3 digits, each 0-5"}, 400)
             faces.set_code(code)
             self._json({"ok": True})
+        elif path == "/api/set_schedule":
+            try:
+                self.app.schedule.set(str(body.get("late_after", "")).strip())
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            self._json({"ok": True, "late_after": self.app.schedule.late_after})
         elif path == "/api/reset_attendance":
             if pid and not C.ID_RE.match(pid):
                 return self._json({"error": "Bad employee ID"}, 400)

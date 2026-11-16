@@ -26,9 +26,9 @@ from checkin import config as C
 from checkin.faces import FaceSystem
 from checkin.flow import UserFlow
 from checkin.hands import HandSystem
-from checkin.storage import AccessLog, SheetSender
+from checkin.storage import AccessLog, Schedule, SheetSender
 from checkin.web import make_server
-from checkin.workers import FrameSource, StreamingOutput, worker_loop
+from checkin.workers import FrameSource, StreamingOutput, oled_loop, worker_loop
 
 
 def start_camera():
@@ -50,7 +50,8 @@ def main():
 
     sheet = SheetSender()
     hands = HandSystem()
-    flow = UserFlow(AccessLog(sheet), on_code_step=hands.reset)
+    schedule = Schedule()
+    flow = UserFlow(AccessLog(sheet), on_code_step=hands.reset, schedule=schedule)
     faces = FaceSystem(flow, get_jpeg=lambda: output.frame)
     hands.attach(flow, faces)
 
@@ -62,7 +63,9 @@ def main():
         frames, C.FACE_WORKER, faces.update, faces.on_down, faces.set_alive, faces.worker_active,
         faces.worker_cap, faces.worker_header)).start()
 
-    app = SimpleNamespace(hands=hands, faces=faces, flow=flow, sheet=sheet, output=output)
+    threading.Thread(target=oled_loop, daemon=True).start()  # OLED status screen (optional hardware)
+
+    app = SimpleNamespace(hands=hands, faces=faces, flow=flow, sheet=sheet, output=output, schedule=schedule)
     try:
         print(f"Secure check-in on http://0.0.0.0:{C.PORT}/user (admin: /admin)", flush=True)
         make_server(app).serve_forever()

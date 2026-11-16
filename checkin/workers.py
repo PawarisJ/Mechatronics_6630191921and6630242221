@@ -48,6 +48,23 @@ class FrameSource:
             return self.frame, self.seq
 
 
+def oled_loop():
+    """Keep the OLED status program running. It exits with code 3 when there is no display;
+    then wait OLED_RETRY_SECONDS before trying again, instead of restarting it every few seconds."""
+    while True:
+        started = time.monotonic()
+        try:
+            code = subprocess.Popen([C.WORKER_PYTHON, C.OLED_WORKER]).wait()
+        except OSError as e:
+            logging.warning("OLED worker could not start: %s", e)
+            code = -1
+        quick = time.monotonic() - started < 10
+        if code != 0 or quick:
+            logging.warning("OLED worker stopped (exit %s); retrying in %s s", code,
+                            C.OLED_RETRY_SECONDS if quick else 3)
+        time.sleep(C.OLED_RETRY_SECONDS if quick else 3)
+
+
 def worker_loop(frames, script, on_result, on_down, set_alive, active, max_fps=None, header_extra=None):
     """Feed small camera frames to a helper process (at most max_fps) while active() is true;
     a paused worker just waits on its input and uses no CPU. Restart it if it dies."""

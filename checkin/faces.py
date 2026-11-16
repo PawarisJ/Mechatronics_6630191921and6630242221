@@ -134,9 +134,9 @@ class FaceSystem:
                 t["cand"], t["hits"] = pid, 1
             if t["hits"] >= C.CONFIRM_HITS:
                 t["pid"] = pid
-                checked_in_at = self.attendance.touch(pid)
+                checked_in = self.attendance.touch(pid)
                 if not self.registering():
-                    if self.flow.person_confirmed(pid, self.db.people[pid]["name"], sim, checked_in_at,
+                    if self.flow.person_confirmed(pid, self.db.people[pid]["name"], sim, checked_in,
                                                   self.code.is_set(), tid):
                         t["blink"] = BlinkDetector()  # liveness check starts for this face
         else:
@@ -256,9 +256,9 @@ class FaceSystem:
         crop.save(self._photo_tmp(pid), "JPEG", quality=85)
 
     # --- actions from the code step and the admin page
-    def check_in(self, person):
+    def check_in(self, person, when, timing):
         with self.lock:
-            return dict(self.attendance.check_in(person["id"], person["name"], person["sim"]))
+            return dict(self.attendance.check_in(person["id"], person["name"], person["sim"], when, timing))
 
     def check_code(self, code):
         with self.lock:

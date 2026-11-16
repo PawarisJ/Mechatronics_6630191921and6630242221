@@ -1,5 +1,6 @@
 """The user-page sequence: 1) face recognised -> 2) blink -> 3) 3-digit finger code -> 4) result.
 Only the worker for the current step is fed camera frames, so face and hand tracking never compete."""
+import datetime
 import math
 import threading
 import time
@@ -8,8 +9,9 @@ from . import config as C
 
 
 class UserFlow:
-    def __init__(self, access_log, on_code_step):
+    def __init__(self, access_log, on_code_step, schedule):
         self.access_log = access_log
+        self.schedule = schedule  # decides "On time" / "Late" when a code is accepted
         self.on_code_step = on_code_step  # called when the code step starts (fresh hand tracking)
         self.lock = threading.Lock()
         self.stage = "face"
@@ -51,7 +53,8 @@ class UserFlow:
         kind, person = result["kind"], self.person
         if person and person["id"] == pid:
             if kind == "checked_in":
-                self.access_log.log(person, "Passed", "Correct", "Access granted")
+                self.access_log.log(person, "Passed", "Correct", "Access granted",
+                                    status=result["timing"], when=result["when"])
             elif kind == "denied":
                 self.access_log.log(person, "Passed", "Incorrect",
                                     f"Access denied ({C.MAX_ATTEMPTS} wrong codes, locked 1 min)")
@@ -61,6 +64,7 @@ class UserFlow:
             elif kind == "no_blink":
                 self.access_log.log(person, "Failed", "-", "Liveness failed (no blink)")
         now = time.monotonic()
+        result.pop("when", None)  # only for the log above; the rest is shown on the pages
         self.stage, self.result, self.until = "result", result, now + C.RESULT_SECONDS
         self.cooldown[pid] = now + C.RESULT_SECONDS + cooldown
 
@@ -69,14 +73,16 @@ class UserFlow:
             return self._tick()
 
     # --- step 1 -> 2: a registered face was recognised
-    def person_confirmed(self, pid, name, sim, checked_in_at, has_code, tid):
-        """Returns True if the person moves on to the blink (liveness) step."""
+    def person_confirmed(self, pid, name, sim, checked_in, has_code, tid):
+        """checked_in: today's attendance record ({"check_in", "timing", ...}) or None.
+        Returns True if the person moves on to the blink (liveness) step."""
         now = time.monotonic()
         with self.lock:
             if self._tick() != "face" or self.cooldown.get(pid, 0) > now:
                 return False
-            if checked_in_at:
-                self._show_result({"kind": "already", "name": name, "time": checked_in_at}, pid, C.COOLDOWN_SECONDS)
+            if checked_in:
+                self._show_result({"kind": "already", "name": name, "time": checked_in["check_in"],
+                                   "timing": checked_in.get("timing") or ""}, pid, C.COOLDOWN_SECONDS)
                 return False
             if not has_code:
                 self._show_result({"kind": "no_code", "name": name}, pid, C.COOLDOWN_SECONDS)
@@ -136,37 +142,37 @@ class UserFlow:
             return dict(self.person), "".join(str(d) for d in e["digits"])
 
     def code_checked(self, ok):
-        """Returns 'granted', 'retry' or 'denied'."""
+        """Returns (outcome, grant): outcome is 'granted', 'retry' or 'denied'; on 'granted', grant is
+        {"when": datetime, "time": "HH:MM:SS", "timing": "On time" | "Late"}, decided here once and
+        used for the access log, the attendance record and the result screen. Otherwise grant is None."""
         with self.lock:
             if self.stage != "code":
-                return "retry"
+                return "retry", None
             p = self.person
             if ok:
-                self._show_result({"kind": "checked_in", "name": p["name"], "time": None}, p["id"], C.COOLDOWN_SECONDS)
-                return "granted"
+                when = datetime.datetime.now()
+                grant = {"when": when, "time": when.strftime("%H:%M:%S"), "timing": self.schedule.status(when)}
+                self._show_result({"kind": "checked_in", "name": p["name"], "time": grant["time"],
+                                   "timing": grant["timing"], "when": when}, p["id"], C.COOLDOWN_SECONDS)
+                return "granted", grant
             p["attempts"] += 1
             left = C.MAX_ATTEMPTS - p["attempts"]
             print(f"[flow] wrong code for {p['name']} ({p['id']}), {left} tries left", flush=True)
             if left <= 0:
                 self._show_result({"kind": "denied", "name": p["name"]}, p["id"], C.LOCKOUT_SECONDS)
-                return "denied"
+                return "denied", None
             self.access_log.log(p, "Passed", "Incorrect", f"Wrong code ({left} {'try' if left == 1 else 'tries'} left)")
             # the hand is probably still showing the last digit: don't instantly reuse it
             self.entry = self._new_entry(f"Wrong code. {left} {'try' if left == 1 else 'tries'} left.",
                                          last=self.entry["last"])
             self._pause(self.entry, C.RETRY_PAUSE)
-            return "retry"
+            return "retry", None
 
     def clear_cooldown(self, ids):
         """After an admin reset, let these people start again right away."""
         with self.lock:
             for i in ids:
                 self.cooldown.pop(i, None)
-
-    def set_time(self, t):
-        with self.lock:
-            if self.result:
-                self.result["time"] = t
 
     def snapshot(self):
         with self.lock:

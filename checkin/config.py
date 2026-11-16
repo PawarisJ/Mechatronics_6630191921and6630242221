@@ -19,6 +19,8 @@ ADMIN_PAGE_FILE = os.path.join(BASE_DIR, "admin_page.html")  # so they can chang
 WORKER_PYTHON = os.path.join(HOME, "mp312/bin/python")
 FACE_WORKER = os.path.join(BASE_DIR, "face_worker.py")
 HAND_WORKER = os.path.join(BASE_DIR, "gesture_worker.py")
+OLED_WORKER = os.path.join(BASE_DIR, "oled_worker.py")  # status screen on the SSD1306 OLED
+OLED_RETRY_SECONDS = 30      # OLED missing (I2C off / not wired): try again this often
 FACE_MAX_FPS = 10            # face recognition rate cap (the blink step is not capped)
 
 # ---- files
@@ -30,8 +32,16 @@ ACCESS_CODE_FILE = os.path.join(FACES_DIR, "access_code.json")  # shared code, s
 PHOTOS_DIR = os.path.join(FACES_DIR, "photos")
 ATTENDANCE_CSV = os.path.join(HOME, "attendance_log.csv")  # check-ins / resets (used to rebuild today's list)
 ACCESS_CSV = os.path.join(HOME, "access_log.csv")          # every access attempt (same as the Google Sheet)
-ACCESS_HEADER = ["Date", "Time", "Employee ID", "Name", "Face match (%)", "Blink check", "Password", "Result"]
+ACCESS_HEADER = ["Date", "Time", "Employee ID", "Name", "Face match (%)", "Blink check", "Password", "Result",
+                 "Status"]
 RESET_STATUS = "Reset by admin"
+
+# ---- on time / late: a check-in earlier than the cutoff is "On time", at or after it "Late".
+# The cutoff is set on the admin page and saved in SCHEDULE_FILE.
+SCHEDULE_FILE = os.path.join(FACES_DIR, "schedule.json")
+DEFAULT_LATE_AFTER = "08:00"
+TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")  # HH:MM, 00:00-23:59
+ON_TIME, LATE = "On time", "Late"
 
 # ---- debug logs of raw finger / blink measurements (for re-tuning thresholds); off in normal use
 DEBUG_LOGS = False

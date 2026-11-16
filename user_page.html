@@ -122,6 +122,16 @@
   .confetti { position: fixed; top: -20px; width: 12px; height: 18px; border-radius: 3px; z-index: 50;
               pointer-events: none; animation: fall linear forwards; }
 
+  /* Big ON TIME / LATE stamp on the result screen */
+  #verdict { display: none; font-family: 'Baloo 2', 'Trebuchet MS', system-ui, sans-serif; font-weight: 900;
+             font-size: clamp(3rem, 11vh, 8rem); line-height: 1; letter-spacing: .02em; color: #fff; white-space: nowrap;
+             padding: 2.2vh 4vw 1.4vh; border-radius: 28px; margin: 1vh 0; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+  #verdict.on { display: inline-block; animation: stamp .45s cubic-bezier(.2, 1.6, .4, 1) both; }
+  #verdict.ontime { background: #16a34a; }
+  #verdict.late { background: #dc2626; animation: stamp .45s cubic-bezier(.2, 1.6, .4, 1) both, pulse 1s .5s 3; }
+  #verdict small { font-size: .6em; vertical-align: .15em; margin-left: .2em; }
+  body.has-verdict #emoji { display: none; }
+  @keyframes stamp { from { transform: scale(2.4) rotate(-8deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
   @keyframes pulse { 50% { opacity: .55; } }
   @keyframes wave { 0%, 60%, 100% { transform: rotate(0); } 15% { transform: rotate(16deg); } 30% { transform: rotate(-10deg); } 45% { transform: rotate(12deg); } }
   @keyframes blink { 0%, 40%, 60%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.15); } }
@@ -164,6 +174,7 @@
         <div class="step" id="st3"><b>🎉</b>Done</div>
       </div>
       <div id="emoji" class="anim-wave">👋</div>
+      <div id="verdict"></div>
       <h2 class="title" id="title">Hi there!</h2>
       <p class="text" id="text">Look at the camera to check in</p>
       <div id="timer"></div>
@@ -234,9 +245,13 @@ function view(s) {
   if (s.stage === 'code') return { key: 'code', theme: 'orange', emoji: '✋', anim: 'wave',
     title: 'Show your code', text: 'Use one hand, one number at a time', timer: p.seconds_left, code: true };
   if (s.stage === 'result' && r) {
-    if (r.kind === 'checked_in') return { key: 'ok' + r.name, theme: 'green', emoji: '🎉', anim: 'bounce', party: true,
-      title: 'Welcome, ' + r.name + '!', text: r.time ? 'You are checked in at ' + r.time : 'You are checked in' };
+    if (r.kind === 'checked_in') return r.timing === 'Late'
+      ? { key: 'late' + r.name, theme: 'red', emoji: '🏃', anim: 'bounce', verdict: 'late',
+          title: 'Welcome, ' + r.name + '!', text: 'Checked in at ' + r.time }
+      : { key: 'ok' + r.name, theme: 'green', emoji: '🎉', anim: 'bounce', party: true, verdict: 'ontime',
+          title: 'Welcome, ' + r.name + '!', text: 'Checked in at ' + r.time };
     if (r.kind === 'already') return { key: 'again' + r.name, theme: 'teal', emoji: '👍', anim: 'bounce',
+      verdict: r.timing === 'Late' ? 'late' : r.timing ? 'ontime' : '',
       title: 'Hi again, ' + r.name + '!', text: 'You already checked in today at ' + r.time };
     if (r.kind === 'denied') return { key: 'denied', theme: 'red', emoji: '🚫', anim: 'shake',
       title: 'Access denied', text: 'Too many wrong codes. Please try again in 1 minute.' };
@@ -247,7 +262,10 @@ function view(s) {
     if (r.kind === 'no_code') return { key: 'nocode', theme: 'yellow', emoji: '🔑', anim: '',
       title: 'No access code yet', text: 'Please ask the admin to set the access code' };
   }
-  return { key: 'idle', theme: 'blue', emoji: '👋', anim: 'wave', title: 'Hi there!', text: 'Look at the camera to check in' };
+  const sc = s.schedule;
+  return { key: 'idle', theme: 'blue', emoji: '👋', anim: 'wave', title: 'Hi there!',
+    text: 'Look at the camera to check in' + (!sc ? '' : sc.late_now
+      ? ' · from ' + sc.late_after + ' check-ins count as Late' : ' · on time until ' + sc.late_after) };
 }
 
 function confetti() {
@@ -306,6 +324,11 @@ function render(s) {
     e.className = ''; void e.offsetWidth;
     e.textContent = v.emoji; e.className = v.anim ? 'anim-' + v.anim : '';
     if (v.party) confetti();
+    const vd = $('verdict');  // big ON TIME / LATE stamp (restarts its animation on each new result)
+    vd.className = ''; void vd.offsetWidth;
+    vd.innerHTML = v.verdict === 'late' ? 'LATE<small>⚠️</small>' : v.verdict === 'ontime' ? 'ON TIME<small>✅</small>' : '';
+    vd.className = v.verdict ? 'on ' + v.verdict : '';
+    document.body.classList.toggle('has-verdict', !!v.verdict);
   }
   $('title').textContent = v.title;
   $('text').textContent = v.text;
@@ -330,13 +353,13 @@ poll();
 <script>
 /* Camera auto-reconnect: if the Pi was booting or restarted, reload the stream once it is back. */
 (function () {
-  const cam = document.getElementById(cam);
+  const cam = document.getElementById('cam');
   let down = false, last = 0;
-  function reload() { last = Date.now(); cam.src = /stream.mjpg?t= + last; }
-  cam.addEventListener(error, () => { down = true; setTimeout(reload, 2000); });
+  function reload() { last = Date.now(); cam.src = '/stream.mjpg?t=' + last; }
+  cam.addEventListener('error', () => { down = true; setTimeout(reload, 2000); });
   setInterval(async () => {
     try {
-      const r = await fetch(/status.json, { cache: no-store });
+      const r = await fetch('/status.json', { cache: 'no-store' });
       if (r.ok && (down || !cam.naturalWidth) && Date.now() - last > 3000) { down = false; reload(); }
     } catch (e) { down = true; }
   }, 2000);

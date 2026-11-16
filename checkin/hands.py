@@ -51,9 +51,9 @@ class HandSystem:
         entered = self.flow.code_frame(digit, result["hand"])
         if entered:  # all digits in: check the code (outside the flow lock)
             person, code = entered
-            outcome = self.flow.code_checked(self.faces.check_code(code))
+            outcome, grant = self.flow.code_checked(self.faces.check_code(code))
             if outcome == "granted":
-                self.flow.set_time(self.faces.check_in(person)["check_in"])
+                self.faces.check_in(person, grant["when"], grant["timing"])
             elif outcome == "denied":
                 self.faces.deny(person)
 
