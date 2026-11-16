@@ -1,0 +1,22 @@
+# systemd *user* service: starts the camera / check-in system on boot and restarts it if it crashes.
+# Install on the Pi (no sudo needed):
+#   mkdir -p ~/.config/systemd/user && cp camera-stream.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now camera-stream
+#   loginctl enable-linger      # start at boot even before anyone logs in
+# Manage:  systemctl --user status|restart|stop camera-stream      Log: ~/camera_stream.log
+
+[Unit]
+Description=Pi camera check-in (face + blink + finger code)
+StartLimitIntervalSec=0
+
+[Service]
+WorkingDirectory=%h
+ExecStart=/usr/bin/python3 %h/camera_stream.py
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:%h/camera_stream.log
+StandardError=append:%h/camera_stream.log
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attendance Admin</title>
+<style>
+  :root { color-scheme: dark; --bg:#111; --panel:#1b1b1d; --line:#2c2c30; --fg:#eee; --muted:#9a9aa0;
+          --green:#30c46c; --yellow:#ffc800; --red:#e5484d; --blue:#8ab4f8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+         font-family: system-ui, sans-serif; }
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+  h2 { font-size: 1rem; font-weight: 600; margin: 0 0 10px; }
+  a { color: var(--blue); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+         background: var(--red); margin-right: 6px; animation: blink 1.4s infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+  .wrap { position: relative; max-width: 100%; }
+  .wrap img { display: block; max-width: 100%; max-height: 75vh; border-radius: 8px; background: #000; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .muted { color: var(--muted); }
+
+  body { padding: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+           flex-wrap: wrap; max-width: 1200px; margin: 0 auto 16px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px;
+          max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  form { display: grid; grid-template-columns: 1fr 1.6fr auto; gap: 8px; align-items: end; }
+  #codeForm { grid-template-columns: 1fr auto; max-width: 360px; }
+  @media (max-width: 520px) { form { grid-template-columns: 1fr; } }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); }
+  input { background: #0d0d0f; border: 1px solid var(--line); color: var(--fg); border-radius: 6px;
+          padding: 8px 10px; font: inherit; font-size: .95rem; }
+  button { background: #2563eb; color: #fff; border: 0; border-radius: 6px; padding: 9px 14px;
+           font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: transparent; color: var(--red); border: 1px solid var(--line); padding: 5px 10px;
+                 font-weight: 500; font-size: .85rem; }
+  .progress { height: 8px; background: #0d0d0f; border-radius: 4px; overflow: hidden; margin-top: 10px; }
+  .progress div { height: 100%; width: 0; background: var(--green); transition: width .2s; }
+  #jobMsg { margin-top: 8px; font-size: .9rem; min-height: 1.3em; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: .8rem; }
+  .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .person { background: #0d0d0f; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .person img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #222; }
+  .person div { padding: 8px; display: flex; flex-direction: column; gap: 4px; font-size: .85rem; }
+  .person b { overflow-wrap: anywhere; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pill { font-size: .75rem; padding: 2px 8px; border-radius: 99px; background: #233; color: var(--green); }
+  .pill.no { color: var(--muted); background: #222; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot"></span>Attendance admin &middot; icemossmechaproj</h1>
+  <div class="row" style="font-size:.9rem;gap:16px"><a href="/user" target="_blank" rel="noopener">User page</a>
+    <a href="https://docs.google.com/spreadsheets/d/1OuEBVl8QW8GLiC43LR5TyyW0WH_jRvrPpIp1BUuXIQw/edit"
+       target="_blank" rel="noopener">Google Sheet</a></div>
+</header>
+<div class="grid">
+  <div class="col">
+    <div class="panel">
+      <div class="wrap"><img id="cam" src="/stream.mjpg" alt="Live camera stream"><canvas id="overlay"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Access code <span class="muted" style="font-weight:400">(same for everyone)</span></h2>
+      <div id="codeState" class="muted" style="font-size:.9rem;margin-bottom:10px"></div>
+      <form id="codeForm">
+        <label>New 3-digit code (each digit 0&ndash;5)<input id="newCode" required type="password" inputmode="numeric"
+          maxlength="3" pattern="[0-5]{3}" placeholder="&bull;&bull;&bull;" autocomplete="new-password"
+          title="Exactly 3 digits, each 0-5, e.g. 324"></label>
+        <button>Save code</button>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Register a person</h2>
+      <form id="regForm">
+        <label>Employee ID<input id="pid" required maxlength="32" pattern="[A-Za-z0-9_\-]+" placeholder="E001"></label>
+        <label>Full name<input id="pname" required maxlength="60" placeholder="Name Surname"></label>
+        <button id="regBtn">Register face</button>
+      </form>
+      <div class="progress"><div id="bar"></div></div>
+      <div id="jobMsg" class="muted">Only the person being registered should be in front of the camera.
+        They will be asked to blink first (so a photo can't be registered), then to turn their head slightly
+        while samples are taken.</div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="panel">
+      <div class="row"><h2>Today's attendance <span id="today" class="muted" style="font-weight:400"></span></h2>
+        <div class="row"><span id="presentCount" class="muted" style="font-size:.9rem"></span>
+          <button id="resetAll" class="ghost">Reset all</button></div></div>
+      <table><thead><tr><th>ID</th><th>Name</th><th>Check-in</th><th>Last seen</th><th></th></tr></thead>
+        <tbody id="attBody"></tbody></table>
+    </div>
+    <div class="panel">
+      <h2>Registered people (<span id="pcount">0</span>)</h2>
+      <div id="people" class="people"></div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const cam = $('cam'), canvas = $('overlay'), ctx = canvas.getContext('2d');
+const FACE_COLORS = { known: '#30c46c', checking: '#ffc800', unknown: '#e5484d', small: '#9a9aa0' };
+let peopleVersion = -1, presentIds = new Set(), jobRunning = false, todayKey = '', lastSeenCells = {};
+
+async function resetAttendance(id, question) {
+  if (!confirm(question)) return;
+  try { await api('/api/reset_attendance', id ? { id } : {}); todayKey = ''; peopleVersion = -1; }
+  catch (e) { alert(e.message); }
+}
+
+function el(tag, props, ...kids) { const e = Object.assign(document.createElement(tag), props || {}); e.append(...kids); return e; }
+
+function drawFaces(faces) {
+  const r = cam.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.font = '600 13px system-ui, sans-serif'; ctx.textBaseline = 'bottom';
+  for (const f of faces) {
+    const [x, y, w, h] = [f.box[0] * r.width, f.box[1] * r.height, f.box[2] * r.width, f.box[3] * r.height];
+    const c = FACE_COLORS[f.state] || '#fff';
+    const label = f.label + (f.sim ? ' ' + Math.round(f.sim * 100) + '%' : '');
+    ctx.lineWidth = 3; ctx.strokeStyle = c; ctx.strokeRect(x, y, w, h);
+    const tw = ctx.measureText(label).width + 10, ty = y > 20 ? y : y + h + 20;
+    ctx.fillStyle = c; ctx.fillRect(x - 1.5, ty - 20, tw, 20);
+    ctx.fillStyle = '#000'; ctx.fillText(label, x + 4, ty - 4);
+  }
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify(body) } : { cache: 'no-store' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+async function loadPeople() {
+  const list = await api('/api/people');
+  $('pcount').textContent = list.length;
+  $('people').replaceChildren(...(list.length ? list.map(p => {
+    const del = el('button', { className: 'ghost', textContent: 'Delete' });
+    del.onclick = async () => {
+      if (!confirm('Delete ' + p.name + ' (' + p.id + ')? Their attendance history is kept.')) return;
+      try { await api('/api/delete', { id: p.id }); } catch (e) { alert(e.message); }
+    };
+    const here = presentIds.has(p.id);
+    return el('div', { className: 'person' },
+      el('img', { src: '/photos/' + encodeURIComponent(p.id) + '.jpg?v=' + p.photo_version, alt: p.name }),
+      el('div', {}, el('b', { textContent: p.name }),
+        el('span', { className: 'muted', textContent: p.id + ' · ' + p.samples + ' samples' }),
+        el('span', { className: 'pill' + (here ? '' : ' no'), textContent: here ? 'present' : 'not in yet',
+                     style: 'align-self:flex-start' }),
+        el('div', { className: 'row' }, del)));
+  }) : [el('span', { className: 'muted', textContent: 'Nobody registered yet.' })]));
+}
+
+function showJob(j) {
+  jobRunning = j.state === 'running';
+  $('regBtn').disabled = jobRunning;
+  $('regBtn').textContent = jobRunning ? 'Capturing…' : 'Register face';
+  if (j.state === 'idle') return;
+  $('bar').style.width = (100 * j.samples / j.target) + '%';
+  $('bar').style.background = j.state === 'failed' ? 'var(--red)' : 'var(--green)';
+  $('jobMsg').textContent = j.message;
+  $('jobMsg').style.color = j.state === 'failed' ? 'var(--red)' : j.state === 'done' ? 'var(--green)' : 'var(--fg)';
+}
+
+async function poll() {
+  try {
+    const s = await api('/api/admin_status.json');
+    drawFaces(s.faces);
+    showJob(s.job);
+    const cs = $('codeState');
+    cs.textContent = !s.code_set ? 'No code set yet. Nobody can check in until you set one.'
+      : s.code_old_scheme ? 'This code was set before codes were limited to digits 0–5. Please set a new one.'
+      : 'Code is set ✓ (last changed ' + s.code_changed.replace('T', ' ') + ')';
+    cs.style.color = s.code_set && !s.code_old_scheme ? 'var(--green)' : 'var(--red)';
+    $('today').textContent = s.today_date;
+    presentIds = new Set(s.today.map(a => a.id));
+    $('presentCount').textContent = s.today.length + ' of ' + s.registered + ' present';
+    $('resetAll').disabled = !s.today.length;
+    // Rebuild rows only when who is checked in changes (so Reset buttons stay clickable);
+    // "last seen" changes every second while someone is in view, so it is updated in place.
+    const key = JSON.stringify(s.today.map(a => [a.id, a.check_in]));
+    if (key !== todayKey) {
+      todayKey = key;
+      lastSeenCells = {};
+      $('attBody').replaceChildren(...(s.today.length ? s.today.map(a => {
+        const btn = el('button', { className: 'ghost', textContent: 'Reset' });
+        btn.onclick = () => resetAttendance(a.id, "Reset today's check-in for " + a.name + ' (' + a.id + ')? ' +
+                                            'They can then check in again.');
+        const seen = el('td', {});
+        lastSeenCells[a.id] = seen;
+        return el('tr', {}, el('td', { textContent: a.id }), el('td', { textContent: a.name }),
+          el('td', { textContent: a.check_in }), seen, el('td', {}, btn));
+      }) : [el('tr', {}, el('td', { colSpan: 5, className: 'muted', textContent: 'No check-ins yet today.' }))]));
+    }
+    for (const a of s.today) if (lastSeenCells[a.id]) lastSeenCells[a.id].textContent = a.last_seen || '—';
+    if (s.people_version !== peopleVersion) { peopleVersion = s.people_version; await loadPeople(); }
+  } catch (e) { $('jobMsg').textContent = 'Lost connection to Pi'; }
+  setTimeout(poll, 300);
+}
+
+$('resetAll').onclick = () => resetAttendance(null, "Reset today's check-ins for everyone? " +
+                                              'Everyone can then check in again. (The history is kept in the log.)');
+
+$('codeForm').onsubmit = async ev => {
+  ev.preventDefault();
+  const c = $('newCode').value.trim();
+  if (!/^[0-5]{3}$/.test(c)) return alert('The code must be exactly 3 digits, each from 0 to 5 (e.g. 324).');
+  try { await api('/api/set_code', { code: c }); $('newCode').value = ''; alert('Access code saved.'); }
+  catch (e) { alert(e.message); }
+};
+
+$('regForm').onsubmit = async ev => {
+  ev.preventDefault();
+  try {
+    await api('/api/register', { id: $('pid').value.trim(), name: $('pname').value.trim() });
+    $('bar').style.width = '0';
+  } catch (e) { $('jobMsg').textContent = e.message; $('jobMsg').style.color = 'var(--red)'; }
+};
+poll();
+</script>
+<script>
+/* Camera auto-reconnect: if the Pi was booting or restarted, reload the stream once it is back. */
+(function () {
+  const cam = document.getElementById(cam);
+  let down = false, last = 0;
+  function reload() { last = Date.now(); cam.src = /stream.mjpg?t= + last; }
+  cam.addEventListener(error, () => { down = true; setTimeout(reload, 2000); });
+  setInterval(async () => {
+    try {
+      const r = await fetch(/status.json, { cache: no-store });
+      if (r.ok && (down || !cam.naturalWidth) && Date.now() - last > 3000) { down = false; reload(); }
+    } catch (e) { down = true; }
+  }, 2000);
+})();
+</script>
+</body>
+</html>

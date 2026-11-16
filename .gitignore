@@ -1,0 +1,23 @@
+# Photos of people, face data and logs never go to GitHub
+*.jpg
+*.jpeg
+*.png
+faces/
+*.csv
+*.log
+*.bak*
+
+# Secrets / per-device settings (kept only on the Pi)
+sheets_webhook_url.txt
+admin_password.txt
+
+# Models (download separately, see README)
+models/
+*.onnx
+*.task
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+mp312/

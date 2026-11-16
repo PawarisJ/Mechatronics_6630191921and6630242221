@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Check-in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- fonts load in the background: if there is no internet the page still shows at once with fallback fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@500;700;800&display=swap"
+      rel="stylesheet" media="print" onload="this.media='all'">
+<style>
+  :root { --ink: #1e293b; --muted: #64748b; --card: #ffffff; --line: #e2e8f0;
+          --accent: #3b82f6; --accent2: #06b6d4; --soft: #e0f2fe; }
+  body[data-theme=purple] { --accent: #8b5cf6; --accent2: #ec4899; --soft: #f3e8ff; }
+  body[data-theme=orange] { --accent: #f97316; --accent2: #facc15; --soft: #ffedd5; }
+  body[data-theme=green]  { --accent: #22c55e; --accent2: #14b8a6; --soft: #dcfce7; }
+  body[data-theme=teal]   { --accent: #14b8a6; --accent2: #3b82f6; --soft: #ccfbf1; }
+  body[data-theme=red]    { --accent: #ef4444; --accent2: #f97316; --soft: #fee2e2; }
+  body[data-theme=yellow] { --accent: #eab308; --accent2: #f97316; --soft: #fef9c3; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; color: var(--ink); font-family: 'Nunito', 'Trebuchet MS', system-ui, sans-serif;
+         background: #ffffff; display: grid; grid-template-rows: auto 1fr; gap: 2vh; padding: 2.5vh 2.5vw; }
+  h1, .title, .clock, .step b, .box, .chip b { font-family: 'Baloo 2', 'Trebuchet MS', system-ui, sans-serif; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 2vw; }
+  .brand { display: flex; align-items: center; gap: 1vw; }
+  .logo { width: clamp(44px, 5vh, 72px); height: clamp(44px, 5vh, 72px); border-radius: 30%; display: grid;
+          place-items: center; font-size: clamp(1.6rem, 3vh, 2.6rem);
+          background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 8px 20px -8px var(--accent);
+          transition: background .4s; }
+  h1 { margin: 0; font-size: clamp(1.6rem, 3.6vh, 3rem); line-height: 1; }
+  h1 span { background: linear-gradient(90deg, #f97316, #ec4899, #8b5cf6, #3b82f6); -webkit-background-clip: text;
+            background-clip: text; color: transparent; }
+  .clockbox { text-align: right; }
+  .clock { font-size: clamp(1.8rem, 4.5vh, 3.6rem); font-weight: 800; line-height: 1; }
+  .date { color: var(--muted); font-size: clamp(.9rem, 1.8vh, 1.3rem); font-weight: 700; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 2.5vw; align-items: center;
+         min-height: 0; }
+  .video-card { position: relative; border-radius: 32px; padding: clamp(8px, 1vh, 14px);
+                background: linear-gradient(135deg, var(--accent), var(--accent2));
+                box-shadow: 0 30px 60px -30px var(--accent); transition: background .4s, box-shadow .4s; }
+  .video-inner { position: relative; border-radius: 24px; overflow: hidden; background: #0f172a; }
+  .video-inner img { display: block; width: 100%; max-height: 74vh; object-fit: contain; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .live { position: absolute; top: 14px; left: 14px; background: rgba(255,255,255,.92); border-radius: 99px;
+          padding: 4px 14px 4px 10px; font-weight: 800; font-size: clamp(.8rem, 1.6vh, 1.1rem); display: flex;
+          align-items: center; gap: 6px; }
+  .live i { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; animation: pulse 1.4s infinite; }
+
+  /* "change number" pop-up over the video */
+  #change { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(15,23,42,.45);
+            opacity: 0; transition: opacity .15s; pointer-events: none; }
+  #change.on { opacity: 1; }
+  #change .card { background: #fff; border-radius: 28px; padding: 3vh 3vw; text-align: center; min-width: 50%;
+                  box-shadow: 0 20px 50px -10px rgba(0,0,0,.4); transform: scale(.9); transition: transform .2s; }
+  #change.on .card { transform: scale(1); }
+  #chEmoji { font-size: clamp(2.5rem, 7vh, 5rem); line-height: 1.1; }
+  #chBig { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: clamp(1.6rem, 4.5vh, 3.2rem); color: #16a34a; }
+  #change.bad #chBig { color: #dc2626; }
+  #chSub { font-size: clamp(1.1rem, 2.6vh, 1.8rem); font-weight: 700; }
+  #change .bar { height: 10px; background: #f1f5f9; border-radius: 99px; overflow: hidden; margin-top: 2vh; }
+  #chBar { height: 100%; background: linear-gradient(90deg, #22c55e, #14b8a6); border-radius: 99px; }
+  #change.bad #chBar { background: linear-gradient(90deg, #ef4444, #f97316); }
+
+  /* instruction panel */
+  .panel { background: var(--card); border-radius: 36px; padding: 3.5vh 2.5vw; min-height: 0;
+           box-shadow: 0 24px 60px -32px rgba(30,41,59,.28); border: 2px solid #eef2f7;
+           display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1.6vh; }
+  .steps { display: flex; align-items: center; width: 100%; justify-content: center; }
+  .step { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--muted);
+          font-weight: 800; font-size: clamp(.75rem, 1.5vh, 1.05rem); }
+  .step b { width: clamp(38px, 5.2vh, 60px); height: clamp(38px, 5.2vh, 60px); border-radius: 50%; display: grid;
+            place-items: center; font-size: clamp(1.1rem, 2.6vh, 1.9rem); background: #f1f5f9; transition: all .3s; }
+  .step.on { color: var(--ink); }
+  .step.on b { background: linear-gradient(135deg, var(--accent), var(--accent2)); transform: scale(1.15);
+               box-shadow: 0 8px 18px -6px var(--accent); }
+  .step.done b { background: #dcfce7; }
+  .step.fail b { background: #fee2e2; }
+  .link { flex: 1; height: 4px; max-width: 4vw; min-width: 12px; border-radius: 4px; background: #e2e8f0;
+          margin: 0 .4vw 1.6vh; }
+
+  #emoji { font-size: clamp(4rem, 13vh, 9rem); line-height: 1.05; margin-top: 1vh; display: inline-block; }
+  .anim-wave { animation: wave 1.8s ease-in-out infinite; transform-origin: 70% 80%; }
+  .anim-blink { animation: blink 2.2s ease-in-out infinite; }
+  .anim-bounce { animation: bounce .9s ease-in-out infinite alternate; }
+  .anim-shake { animation: shake .5s ease-in-out 2; }
+  .title { font-weight: 800; font-size: clamp(2rem, 5.6vh, 4.2rem); line-height: 1.05; margin: 0; }
+  .text { font-size: clamp(1.15rem, 2.9vh, 2rem); font-weight: 700; color: #475569; margin: 0; max-width: 30ch; }
+  #timer { display: none; background: var(--soft); color: var(--ink); border-radius: 99px; padding: 6px 18px;
+           font-weight: 800; font-size: clamp(1rem, 2.2vh, 1.5rem); }
+  #timer.on { display: inline-block; }
+
+  /* code step */
+  #codeArea { display: none; flex-direction: column; align-items: center; gap: 1.4vh; width: 100%; }
+  #codeArea.on { display: flex; }
+  .boxes { display: flex; gap: 1.2vw; }
+  .box { width: clamp(64px, 9.5vh, 120px); height: clamp(76px, 11.5vh, 140px); border-radius: 24px;
+         background: #f8fafc; border: 4px solid #e2e8f0; display: grid; place-items: center;
+         font-size: clamp(2.4rem, 7vh, 5rem); font-weight: 800; color: var(--ink); transition: all .2s; }
+  .box.current { border-color: var(--accent); background: var(--soft); animation: pulse 1.2s infinite; }
+  .box.filled { border-color: #22c55e; background: #dcfce7; color: #16a34a; }
+  .hold { width: min(100%, 30vw); height: 14px; background: #f1f5f9; border-radius: 99px; overflow: hidden; }
+  #hold { height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent2));
+          transition: width .12s linear; }
+  #codeHint { font-size: clamp(1.05rem, 2.4vh, 1.7rem); font-weight: 800; }
+  #codeErr { font-size: clamp(1rem, 2.2vh, 1.5rem); font-weight: 800; color: #dc2626; min-height: 1.2em; }
+  .guide { display: flex; gap: .8vw; flex-wrap: wrap; justify-content: center; }
+  .chip { background: #f8fafc; border: 3px solid #e2e8f0; border-radius: 18px; padding: .8vh .8vw .4vh;
+          display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: clamp(52px, 6.5vh, 84px);
+          transition: all .15s; }
+  .chip b { font-size: clamp(1.2rem, 2.8vh, 2rem); line-height: 1; }
+  .chip.lit { border-color: var(--accent); background: var(--soft); transform: translateY(-4px) scale(1.08); }
+  .fig { height: clamp(26px, 3.6vh, 44px); display: flex; align-items: flex-end; gap: 3px; font-size: clamp(1.3rem, 3vh, 2.2rem); }
+  .fig span { width: clamp(5px, .7vh, 8px); border-radius: 99px; background: #e2e8f0; }
+  .fig span:nth-child(1) { height: 50%; } .fig span:nth-child(2) { height: 85%; } .fig span:nth-child(3) { height: 100%; }
+  .fig span:nth-child(4) { height: 88%; } .fig span:nth-child(5) { height: 66%; }
+  .fig span.up { background: var(--accent); }
+
+  /* confetti */
+  .confetti { position: fixed; top: -20px; width: 12px; height: 18px; border-radius: 3px; z-index: 50;
+              pointer-events: none; animation: fall linear forwards; }
+
+  @keyframes pulse { 50% { opacity: .55; } }
+  @keyframes wave { 0%, 60%, 100% { transform: rotate(0); } 15% { transform: rotate(16deg); } 30% { transform: rotate(-10deg); } 45% { transform: rotate(12deg); } }
+  @keyframes blink { 0%, 40%, 60%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.15); } }
+  @keyframes bounce { from { transform: translateY(0) scale(1); } to { transform: translateY(-14px) scale(1.06); } }
+  @keyframes shake { 25% { transform: translateX(-10px) rotate(-6deg); } 75% { transform: translateX(10px) rotate(6deg); } }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+
+  /* portrait screens: stack the video above the panel */
+  @media (max-aspect-ratio: 1/1) {
+    body { overflow: auto; }
+    main { grid-template-columns: 1fr; align-items: start; }
+    .video-inner img { max-height: 45vh; }
+    .hold { width: 80%; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body data-theme="blue">
+  <header>
+    <div class="brand"><div class="logo">🏢</div><h1><span>Smart</span> Check-in</h1></div>
+    <div class="clockbox"><div class="clock" id="clock">--:--</div><div class="date" id="date"></div></div>
+  </header>
+
+  <main>
+    <div class="video-card">
+      <div class="video-inner">
+        <img id="cam" src="/stream.mjpg" alt="Live camera">
+        <canvas id="overlay"></canvas>
+        <div class="live"><i></i>LIVE</div>
+        <div id="change"><div class="card"><div id="chEmoji">✅</div><div id="chBig"></div><div id="chSub"></div>
+          <div class="bar"><div id="chBar"></div></div></div></div>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="steps">
+        <div class="step" id="st1"><b>😊</b>Face</div><div class="link"></div>
+        <div class="step" id="stB"><b>😉</b>Blink</div><div class="link"></div>
+        <div class="step" id="st2"><b>✋</b>Code</div><div class="link"></div>
+        <div class="step" id="st3"><b>🎉</b>Done</div>
+      </div>
+      <div id="emoji" class="anim-wave">👋</div>
+      <h2 class="title" id="title">Hi there!</h2>
+      <p class="text" id="text">Look at the camera to check in</p>
+      <div id="timer"></div>
+      <div id="codeArea">
+        <div class="boxes"><div class="box" id="b0"></div><div class="box" id="b1"></div><div class="box" id="b2"></div></div>
+        <div class="hold"><div id="hold"></div></div>
+        <div id="codeHint"></div>
+        <div id="codeErr"></div>
+        <div class="guide" id="guide"></div>
+      </div>
+    </section>
+  </main>
+
+
+<script>
+const $ = id => document.getElementById(id);
+const cam = $('cam'), canvas = $('overlay'), ctx = canvas.getContext('2d');
+const FACE_COLORS = { known: '#22c55e', checking: '#f59e0b', unknown: '#ef4444', small: '#94a3b8' };
+const CONFETTI = ['#f97316', '#ec4899', '#8b5cf6', '#3b82f6', '#22c55e', '#facc15'];
+let lastView = '';
+
+// finger guide chips: ✊ for 0, little finger bars for 1-5
+for (let d = 0; d <= 5; d++) {
+  const chip = document.createElement('div'); chip.className = 'chip'; chip.id = 'g' + d;
+  const fig = document.createElement('div'); fig.className = 'fig';
+  if (d === 0) fig.textContent = '✊';
+  // bars are thumb, index, middle, ring, pinky; fingers go up index-first and the thumb last (at 5)
+  else for (let i = 0; i < 5; i++) {
+    const s = document.createElement('span');
+    if ([4, 0, 1, 2, 3][i] < d) s.className = 'up';
+    fig.appendChild(s);
+  }
+  const n = document.createElement('b'); n.textContent = d;
+  chip.append(fig, n); $('guide').appendChild(chip);
+}
+
+function tick() {
+  const d = new Date();
+  $('clock').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  $('date').textContent = d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+tick(); setInterval(tick, 1000);
+
+function drawFaces(faces) {
+  const r = cam.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, r.width, r.height);
+  const fs = Math.max(14, Math.round(r.width / 45));
+  ctx.font = '800 ' + fs + 'px Nunito, system-ui, sans-serif'; ctx.textBaseline = 'middle';
+  for (const f of faces) {
+    const [x, y, w, h] = [f.box[0] * r.width, f.box[1] * r.height, f.box[2] * r.width, f.box[3] * r.height];
+    const c = FACE_COLORS[f.state] || '#fff';
+    ctx.lineWidth = 5; ctx.strokeStyle = c;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, 18) : ctx.rect(x, y, w, h); ctx.stroke();
+    const tw = ctx.measureText(f.label).width + fs * 1.4, th = fs * 1.9;
+    const ty = y > th + 8 ? y - th - 8 : y + h + 8;
+    ctx.fillStyle = c; ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, ty, tw, th, th / 2) : ctx.rect(x, ty, tw, th); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillText(f.label, x + fs * 0.7, ty + th / 2 + 1);
+  }
+}
+
+function view(s) {
+  const r = s.result, p = s.prompt;
+  if (s.stage === 'blink') return { key: 'blink', theme: 'purple', emoji: '😉', anim: 'blink',
+    title: 'Hi, ' + p.name + '!', text: 'Blink slowly so we know it is really you', timer: p.seconds_left };
+  if (s.stage === 'code') return { key: 'code', theme: 'orange', emoji: '✋', anim: 'wave',
+    title: 'Show your code', text: 'Use one hand, one number at a time', timer: p.seconds_left, code: true };
+  if (s.stage === 'result' && r) {
+    if (r.kind === 'checked_in') return { key: 'ok' + r.name, theme: 'green', emoji: '🎉', anim: 'bounce', party: true,
+      title: 'Welcome, ' + r.name + '!', text: r.time ? 'You are checked in at ' + r.time : 'You are checked in' };
+    if (r.kind === 'already') return { key: 'again' + r.name, theme: 'teal', emoji: '👍', anim: 'bounce',
+      title: 'Hi again, ' + r.name + '!', text: 'You already checked in today at ' + r.time };
+    if (r.kind === 'denied') return { key: 'denied', theme: 'red', emoji: '🚫', anim: 'shake',
+      title: 'Access denied', text: 'Too many wrong codes. Please try again in 1 minute.' };
+    if (r.kind === 'timeout') return { key: 'timeout', theme: 'red', emoji: '⏰', anim: 'shake',
+      title: "Time's up!", text: r.name + ', look at the camera to try again' };
+    if (r.kind === 'no_blink') return { key: 'noblink', theme: 'red', emoji: '🙈', anim: 'shake',
+      title: "We didn't see a blink", text: 'Look at the camera and blink slowly to try again' };
+    if (r.kind === 'no_code') return { key: 'nocode', theme: 'yellow', emoji: '🔑', anim: '',
+      title: 'No access code yet', text: 'Please ask the admin to set the access code' };
+  }
+  return { key: 'idle', theme: 'blue', emoji: '👋', anim: 'wave', title: 'Hi there!', text: 'Look at the camera to check in' };
+}
+
+function confetti() {
+  for (let i = 0; i < 70; i++) {
+    const c = document.createElement('div'); c.className = 'confetti';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.background = CONFETTI[i % CONFETTI.length];
+    c.style.animationDuration = 2 + Math.random() * 2 + 's';
+    c.style.animationDelay = Math.random() * .6 + 's';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 5000);
+  }
+}
+
+function showSteps(s) {
+  const r = s.result, kind = r && r.kind;
+  const set = (id, cls) => { $(id).className = 'step' + (cls ? ' ' + cls : ''); };
+  set('st1', s.stage === 'face' ? 'on' : 'done');
+  set('stB', s.stage === 'blink' ? 'on' : s.stage === 'face' || kind === 'already' || kind === 'no_code' ? ''
+    : kind === 'no_blink' ? 'fail' : 'done');
+  set('st2', s.stage === 'code' ? 'on' : kind === 'checked_in' ? 'done' : kind === 'denied' || kind === 'timeout' ? 'fail' : '');
+  set('st3', kind === 'checked_in' || kind === 'already' ? 'done on' : s.stage === 'result' && kind !== 'no_code' ? 'fail' : '');
+}
+
+function showCode(s) {
+  const ch = $('change');
+  if (s.stage !== 'code') { ch.className = ''; return; }
+  const p = s.prompt, pausing = p.pause_left > 0, retry = pausing && p.entered === 0 && !!p.error;
+  for (let i = 0; i < 3; i++) {
+    const b = $('b' + i), filled = i < p.entered, cur = i === p.entered && !pausing;
+    b.className = 'box' + (filled ? ' filled' : '') + (cur ? ' current' : '');
+    b.textContent = filled ? '★' : cur && p.cand !== null ? p.cand : '';
+  }
+  for (let d = 0; d <= 5; d++) $('g' + d).classList.toggle('lit', !pausing && p.cand === d);
+  $('hold').style.width = (!pausing && p.cand !== null ? p.hold * 100 : 0) + '%';
+  ch.className = pausing ? 'on' + (retry ? ' bad' : '') : '';
+  if (pausing) {
+    $('chEmoji').textContent = retry ? '😬' : '✅';
+    $('chBig').textContent = retry ? p.error : 'Number ' + p.entered + ' saved!';
+    $('chSub').textContent = retry ? 'Start again with number 1' : 'Now change to number ' + (p.entered + 1) + ' of 3';
+    $('chBar').style.width = (100 * p.pause_left / p.pause_total) + '%';
+  }
+  $('codeHint').textContent = pausing ? 'Change your fingers now…'
+    : p.cand === null ? 'Show number ' + (p.entered + 1) + ' of 3'
+    : p.repeat ? 'Same number again? Keep holding ' + p.cand
+    : 'Hold still…';
+  $('codeErr').textContent = pausing ? '' : p.error || '';
+}
+
+function render(s) {
+  const v = view(s);
+  document.body.dataset.theme = v.theme;
+  if (v.key !== lastView) {  // new state: swap emoji + restart its animation
+    lastView = v.key;
+    const e = $('emoji');
+    e.className = ''; void e.offsetWidth;
+    e.textContent = v.emoji; e.className = v.anim ? 'anim-' + v.anim : '';
+    if (v.party) confetti();
+  }
+  $('title').textContent = v.title;
+  $('text').textContent = v.text;
+  const t = $('timer');
+  t.classList.toggle('on', v.timer !== undefined);
+  if (v.timer !== undefined) t.textContent = '⏱ ' + v.timer + ' s';
+  $('codeArea').classList.toggle('on', !!v.code);
+  showSteps(s);
+  showCode(s);
+}
+
+async function poll() {
+  try {
+    const s = await (await fetch('/status.json', { cache: 'no-store' })).json();
+    drawFaces(s.faces);
+    render(s);
+  } catch (e) { $('text').textContent = 'Connecting to the camera…'; }
+  setTimeout(poll, 120);
+}
+poll();
+</script>
+<script>
+/* Camera auto-reconnect: if the Pi was booting or restarted, reload the stream once it is back. */
+(function () {
+  const cam = document.getElementById(cam);
+  let down = false, last = 0;
+  function reload() { last = Date.now(); cam.src = /stream.mjpg?t= + last; }
+  cam.addEventListener(error, () => { down = true; setTimeout(reload, 2000); });
+  setInterval(async () => {
+    try {
+      const r = await fetch(/status.json, { cache: no-store });
+      if (r.ok && (down || !cam.naturalWidth) && Date.now() - last > 3000) { down = false; reload(); }
+    } catch (e) { down = true; }
+  }, 2000);
+})();
+</script>
+</body>
+</html>
