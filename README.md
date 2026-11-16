@@ -1,4 +1,4 @@
-# icemossmechaproj – Raspberry Pi face attendance
+# Mechatronics_6630191921and6630242221 – Raspberry Pi face attendance
 
 A check-in kiosk that runs on a Raspberry Pi 4 with a Pi Camera v2. A person checks in in three steps:
 
