@@ -88,7 +88,7 @@ $$
 | Adapter | Raspberry Pi 4 (POWER IN) | USB-C | 5V DC |
 | Raspberry Pi 4 | เบราว์เซอร์ / Google Sheet | Wi-Fi | HTTP :8000 และ HTTPS POST |
 
-![ภาพที่ 1 แผนผังการต่อสาย](wiring%20diagram.jpeg)
+![ภาพที่ 1 แผนผังการต่อสาย](docs/images/wiring-diagram.jpeg)
 
 *ภาพที่ 1 แผนผังการต่อสาย (wiring diagram)*
 
@@ -105,7 +105,7 @@ $$
 3. ผู้ใช้ชูนิ้วแสดงรหัส 3 หลัก ทีละหลัก ค้างไว้หลักละ 1 วินาที (ผิด 3 ครั้งถูกล็อก 60 วินาที)
 4. เมื่อผ่านครบ ระบบเทียบเวลากับเวลาตัด แล้วแสดง **ON TIME** หรือ **LATE** บนหน้าเว็บและจอ OLED บันทึกลง CSV และส่งขึ้น Google Sheet
 
-![ภาพที่ 2 ขั้นตอนการเช็กอิน](workflow.png)
+![ภาพที่ 2 ขั้นตอนการเช็กอิน](docs/images/workflow.png)
 
 *ภาพที่ 2 ขั้นตอนการเช็กอินตั้งแต่ยืนหน้ากล้องจนถึงผล On time / Late*
 
@@ -139,49 +139,56 @@ $$
 
 ```
 .
-├── camera_stream.py            ← จุดเริ่มต้นโปรแกรม
-├── checkin/                    ← โมดูลหลักของระบบเช็กอิน
-│   ├── config.py  flow.py  faces.py  hands.py
-│   └── storage.py  web.py  workers.py
-├── face_worker.py              ← worker ภาพ (Python 3.12)
-├── gesture_worker.py
-├── oled_worker.py
-├── user_page.html              ← หน้าเว็บ
-├── admin_page.html
-├── google_sheet_apps_script.gs ← ฝั่ง Google Sheet
-├── camera-stream.service       ← systemd service
-├── tests/                      ← unit test
-├── wiring diagram.jpeg         ← รูปประกอบ
-└── workflow.png
+├── README.md                       ← รายงานโครงงาน (ไฟล์นี้)
+├── pi/                             ← โปรแกรมทั้งหมดที่รันบน Raspberry Pi
+│   ├── camera_stream.py            ← จุดเริ่มต้นโปรแกรม
+│   ├── checkin/                    ← โมดูลหลักของระบบเช็กอิน
+│   │   ├── config.py  flow.py  faces.py  hands.py
+│   │   └── storage.py  web.py  workers.py
+│   ├── face_worker.py              ← worker ภาพ (Python 3.12)
+│   ├── gesture_worker.py
+│   ├── oled_worker.py
+│   ├── user_page.html              ← หน้าเว็บ
+│   ├── admin_page.html
+│   └── tests/                      ← unit test
+├── google-sheet/
+│   └── google_sheet_apps_script.gs ← สคริปต์ฝั่ง Google Sheet
+├── systemd/
+│   └── camera-stream.service       ← ให้ระบบเริ่มเองเมื่อเปิดเครื่อง
+└── docs/images/                    ← รูปประกอบรายงาน
+    ├── wiring-diagram.jpeg
+    └── workflow.png
 ```
+
+ไฟล์ใน `pi/` ต้องอยู่ในโฟลเดอร์เดียวกัน เพราะโปรแกรมหาไฟล์อื่น (worker และหน้าเว็บ) จากโฟลเดอร์ที่มี `camera_stream.py`
 
 ### 5.1 โปรแกรมหลัก (Python 3.13, process หลัก)
 
 | ไฟล์ | หน้าที่ | บรรทัด |
 | --- | --- | --- |
-| [`camera_stream.py`](camera_stream.py) | จุดเริ่มต้น: เปิดกล้อง สร้าง thread เริ่ม worker และเว็บเซิร์ฟเวอร์ | 77 |
-| [`checkin/config.py`](checkin/config.py) | ค่าตั้งและเกณฑ์ทั้งหมด (ความคล้ายใบหน้า เกณฑ์กะพริบตา เวลาตัดเริ่มต้น ฯลฯ) | 86 |
-| [`checkin/flow.py`](checkin/flow.py) | ขั้นตอน ใบหน้า → กะพริบตา → รหัส → ผล (state machine) และตัดสิน On time / Late | 194 |
-| [`checkin/faces.py`](checkin/faces.py) | ติดตามใบหน้า ลงทะเบียน ตรวจกะพริบตา | 304 |
-| [`checkin/hands.py`](checkin/hands.py) | แปลงจำนวนนิ้วเป็นตัวเลขรหัส | 64 |
-| [`checkin/storage.py`](checkin/storage.py) | ฐานข้อมูลใบหน้า รหัส (salted hash) เวลาตัด (`Schedule`) ไฟล์ CSV และตัวส่ง Google Sheet | 300 |
-| [`checkin/web.py`](checkin/web.py) | HTTP server, MJPEG stream และ REST API ของหน้า admin | 225 |
-| [`checkin/workers.py`](checkin/workers.py) | ส่งภาพให้ worker รีสตาร์ท worker เมื่อล่ม และเริ่มโปรแกรม OLED ใหม่เมื่อหยุด | 101 |
+| [`pi/camera_stream.py`](pi/camera_stream.py) | จุดเริ่มต้น: เปิดกล้อง สร้าง thread เริ่ม worker และเว็บเซิร์ฟเวอร์ | 77 |
+| [`pi/checkin/config.py`](pi/checkin/config.py) | ค่าตั้งและเกณฑ์ทั้งหมด (ความคล้ายใบหน้า เกณฑ์กะพริบตา เวลาตัดเริ่มต้น ฯลฯ) | 86 |
+| [`pi/checkin/flow.py`](pi/checkin/flow.py) | ขั้นตอน ใบหน้า → กะพริบตา → รหัส → ผล (state machine) และตัดสิน On time / Late | 194 |
+| [`pi/checkin/faces.py`](pi/checkin/faces.py) | ติดตามใบหน้า ลงทะเบียน ตรวจกะพริบตา | 304 |
+| [`pi/checkin/hands.py`](pi/checkin/hands.py) | แปลงจำนวนนิ้วเป็นตัวเลขรหัส | 64 |
+| [`pi/checkin/storage.py`](pi/checkin/storage.py) | ฐานข้อมูลใบหน้า รหัส (salted hash) เวลาตัด (`Schedule`) ไฟล์ CSV และตัวส่ง Google Sheet | 300 |
+| [`pi/checkin/web.py`](pi/checkin/web.py) | HTTP server, MJPEG stream และ REST API ของหน้า admin | 225 |
+| [`pi/checkin/workers.py`](pi/checkin/workers.py) | ส่งภาพให้ worker รีสตาร์ท worker เมื่อล่ม และเริ่มโปรแกรม OLED ใหม่เมื่อหยุด | 101 |
 
 ### 5.2 Worker แยก process (Python 3.12 venv `~/mp312`)
 
 | ไฟล์ | หน้าที่ | บรรทัด |
 | --- | --- | --- |
-| [`face_worker.py`](face_worker.py) | YuNet (ตรวจจับ) + SFace (จดจำ) + Face Landmarker (กะพริบตา) | 180 |
-| [`gesture_worker.py`](gesture_worker.py) | MediaPipe Hands นับนิ้ว | 114 |
-| [`oled_worker.py`](oled_worker.py) | วาดหน้าจอ OLED ด้วย luma.oled (นาฬิกา ขั้นตอนปัจจุบัน ON TIME / LATE) ถ้าไม่มีจอ ระบบหลักยังทำงานต่อได้ | 165 |
+| [`pi/face_worker.py`](pi/face_worker.py) | YuNet (ตรวจจับ) + SFace (จดจำ) + Face Landmarker (กะพริบตา) | 180 |
+| [`pi/gesture_worker.py`](pi/gesture_worker.py) | MediaPipe Hands นับนิ้ว | 114 |
+| [`pi/oled_worker.py`](pi/oled_worker.py) | วาดหน้าจอ OLED ด้วย luma.oled (นาฬิกา ขั้นตอนปัจจุบัน ON TIME / LATE) ถ้าไม่มีจอ ระบบหลักยังทำงานต่อได้ | 165 |
 
 ### 5.3 หน้าเว็บ (HTML + CSS + JavaScript)
 
 | ไฟล์ | หน้าที่ | บรรทัด |
 | --- | --- | --- |
-| [`user_page.html`](user_page.html) | หน้า kiosk แสดงภาพกล้อง คำแนะนำทีละขั้น และตราผล ON TIME / LATE ขนาดใหญ่ | 373 |
-| [`admin_page.html`](admin_page.html) | หน้าผู้ดูแล: ลงทะเบียน ตั้งรหัส ตั้งเวลา Late after ดูรายชื่อ ดาวน์โหลด CSV | 276 |
+| [`pi/user_page.html`](pi/user_page.html) | หน้า kiosk แสดงภาพกล้อง คำแนะนำทีละขั้น และตราผล ON TIME / LATE ขนาดใหญ่ | 373 |
+| [`pi/admin_page.html`](pi/admin_page.html) | หน้าผู้ดูแล: ลงทะเบียน ตั้งรหัส ตั้งเวลา Late after ดูรายชื่อ ดาวน์โหลด CSV | 276 |
 
 ทั้งสองไฟล์ถูกอ่านใหม่ทุกครั้งที่เปิดหน้า แก้แล้วไม่ต้องรีสตาร์ทโปรแกรม
 
@@ -189,24 +196,24 @@ $$
 
 | ไฟล์ | หน้าที่ | บรรทัด |
 | --- | --- | --- |
-| [`google_sheet_apps_script.gs`](google_sheet_apps_script.gs) | Google Apps Script (version 4) รับข้อมูลจาก Pi แล้วเขียนลง Google Sheet พร้อมคอลัมน์ Status | 46 |
-| [`camera-stream.service`](camera-stream.service) | systemd user service: เริ่มเองเมื่อเปิดเครื่อง และรีสตาร์ทภายใน 3 วินาทีเมื่อล่ม | 22 |
+| [`google-sheet/google_sheet_apps_script.gs`](google-sheet/google_sheet_apps_script.gs) | Google Apps Script (version 4) รับข้อมูลจาก Pi แล้วเขียนลง Google Sheet พร้อมคอลัมน์ Status | 46 |
+| [`systemd/camera-stream.service`](systemd/camera-stream.service) | systemd user service: เริ่มเองเมื่อเปิดเครื่อง และรีสตาร์ทภายใน 3 วินาทีเมื่อล่ม | 22 |
 | [`.gitignore`](.gitignore) | กันไม่ให้ข้อมูลใบหน้า log CSV โมเดล และ URL ลับขึ้น GitHub | — |
 
 ### 5.5 การทดสอบ (unittest, 17 ข้อ)
 
 | ไฟล์ | สิ่งที่ทดสอบ | บรรทัด |
 | --- | --- | --- |
-| [`tests/test_schedule.py`](tests/test_schedule.py) | เวลาตัด On time / Late, การบันทึกค่า, ไฟล์ CSV แบบเก่า, คอลัมน์ Status | 85 |
-| [`tests/test_flow.py`](tests/test_flow.py) | ขั้นตอนรหัสถูก/ผิด และการแสดงสถานะที่บันทึกไว้ | 58 |
-| [`tests/test_oled_layout.py`](tests/test_oled_layout.py) | ข้อความบนจอ OLED ในแต่ละสถานะ (ไม่ต้องมีจอจริง) | 47 |
+| [`pi/tests/test_schedule.py`](pi/tests/test_schedule.py) | เวลาตัด On time / Late, การบันทึกค่า, ไฟล์ CSV แบบเก่า, คอลัมน์ Status | 85 |
+| [`pi/tests/test_flow.py`](pi/tests/test_flow.py) | ขั้นตอนรหัสถูก/ผิด และการแสดงสถานะที่บันทึกไว้ | 58 |
+| [`pi/tests/test_oled_layout.py`](pi/tests/test_oled_layout.py) | ข้อความบนจอ OLED ในแต่ละสถานะ (ไม่ต้องมีจอจริง) | 47 |
 
 ### 5.6 รูปประกอบ
 
 | ไฟล์ | เนื้อหา |
 | --- | --- |
-| [`wiring diagram.jpeg`](wiring%20diagram.jpeg) | แผนผังการต่อสาย |
-| [`workflow.png`](workflow.png) | ขั้นตอนการเช็กอิน |
+| [`docs/images/wiring-diagram.jpeg`](docs/images/wiring-diagram.jpeg) | แผนผังการต่อสาย |
+| [`docs/images/workflow.png`](docs/images/workflow.png) | ขั้นตอนการเช็กอิน |
 
 **ไฟล์ที่ไม่อยู่ใน repo:** ข้อมูลใบหน้า (`~/faces/` รวมถึงเวลาตัดใน `schedule.json`), log, CSV และ URL ของ Google Sheet (`~/sheets_webhook_url.txt`) เก็บไว้บน Pi เท่านั้น เพราะเป็นข้อมูลส่วนตัวและความลับ
 
@@ -219,11 +226,11 @@ $$
    ~/mp312/bin/pip install mediapipe==0.10.18 opencv-python==4.10.* numpy luma.oled
    ```
 3. ดาวน์โหลดโมเดลไว้ใน `~/models/`: `face_detection_yunet_2023mar.onnx`, `face_recognition_sface_2021dec.onnx` (OpenCV Zoo), `face_landmarker.task`, `gesture_recognizer.task` (MediaPipe)
-4. คัดลอกไฟล์โปรเจกต์ไปไว้ที่ `~` บน Pi
-5. Google Sheet (ไม่บังคับ): deploy `google_sheet_apps_script.gs` เป็น web app แล้วใส่ URL ใน `~/sheets_webhook_url.txt` ทุกครั้งที่แก้สคริปต์ให้ deploy เป็น **new version** (URL เดิม) Pi ต้องการ version 4 ถ้ายังไม่อัปเดต หน้า admin จะแสดง "update Apps Script"
+4. คัดลอกไฟล์ทั้งหมดใน `pi/` ไปไว้ที่ `~` บน Pi: `cp -r pi/. ~/`
+5. Google Sheet (ไม่บังคับ): deploy `google-sheet/google_sheet_apps_script.gs` เป็น web app แล้วใส่ URL ใน `~/sheets_webhook_url.txt` ทุกครั้งที่แก้สคริปต์ให้ deploy เป็น **new version** (URL เดิม) Pi ต้องการ version 4 ถ้ายังไม่อัปเดต หน้า admin จะแสดง "update Apps Script"
 6. ติดตั้ง service:
    ```sh
-   mkdir -p ~/.config/systemd/user && cp camera-stream.service ~/.config/systemd/user/
+   mkdir -p ~/.config/systemd/user && cp systemd/camera-stream.service ~/.config/systemd/user/
    systemctl --user daemon-reload && systemctl --user enable --now camera-stream
    loginctl enable-linger
    ```
@@ -233,7 +240,7 @@ $$
 **รันเทสต์** (ต้องใช้ `HOME` ชั่วคราว เพราะเทสต์เขียนไฟล์ CSV และไฟล์ตั้งค่า):
 
 ```sh
-mkdir -p /tmp/t/home && cp -r checkin tests oled_worker.py /tmp/t/ && cd /tmp/t
+mkdir -p /tmp/t/home && cp -r pi/checkin pi/tests pi/oled_worker.py /tmp/t/ && cd /tmp/t
 HOME=/tmp/t/home python3 -m unittest discover -s tests -t .
 ```
 
