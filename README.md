@@ -3,7 +3,7 @@
 | รายการ | รายละเอียด |
 | --- | --- |
 | รายวิชา | Mechatronics 2570 (Term Project) |
-| ผู้จัดทำ | รหัส 6630191921 · รหัส 6630242221 |
+| ผู้จัดทำ | Pawaris Jearanaiyuenyong 6630191921 · Phattarapon Inchan 6630242221 |
 | บอร์ด | Raspberry Pi 4 Model B 4GB + Camera Module v2 + LeafHAT (จอ OLED SSD1306) |
 
 **บทคัดย่อ** โครงงานนี้สร้างตู้เช็กอินเข้างานอัตโนมัติบน Raspberry Pi 4 ที่ยืนยันตัวตนสามชั้น ได้แก่ จดจำใบหน้า ตรวจการกะพริบตาเพื่อกันการใช้รูปถ่าย และใส่รหัส 3 หลักด้วยการชูนิ้วมือ เมื่อผ่านครบ ระบบจะเทียบเวลากับเวลาตัด (ค่าเริ่มต้น 08:00 น.) แล้วบันทึกสถานะ On time หรือ Late ลงไฟล์ CSV บน Pi และส่งขึ้น Google Sheet พร้อมแสดงผลบนหน้าเว็บ kiosk และจอ OLED ที่ต่อกับบอร์ด ระบบทั้งหมดประมวลผลบน Pi เครื่องเดียว ใช้ Python ร่วมกับ OpenCV และ MediaPipe และเริ่มทำงานเองเมื่อเปิดเครื่อง
@@ -243,17 +243,3 @@ $$
 mkdir -p /tmp/t/home && cp -r pi/checkin pi/tests pi/oled_worker.py /tmp/t/ && cd /tmp/t
 HOME=/tmp/t/home python3 -m unittest discover -s tests -t .
 ```
-
-## เอกสารอ้างอิง
-
-1. W. Wu, H. Peng, S. Yu, "[YuNet: A Tiny Millisecond-level Face Detector](https://link.springer.com/article/10.1007/s11633-023-1423-y)," *Machine Intelligence Research*, vol. 20, no. 5, pp. 656–665, 2023.
-2. Y. Zhong et al., "[SFace: Sigmoid-Constrained Hypersphere Loss for Robust Face Recognition](https://arxiv.org/abs/2205.12010)," *IEEE Transactions on Image Processing*, 2021 (arXiv:2205.12010).
-3. F. Zhang et al., "[MediaPipe Hands: On-device Real-time Hand Tracking](https://arxiv.org/abs/2006.10214)," CV4ARVR Workshop, 2020.
-4. T. Soukupová, J. Čech, "[Real-Time Eye Blink Detection using Facial Landmarks](https://vision.fe.uni-lj.si/cvww2016/proceedings/papers/05.pdf)," 21st Computer Vision Winter Workshop, 2016.
-5. Google, "[Face landmark detection guide (MediaPipe Face Landmarker)](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker)."
-6. OpenCV Zoo, "[YuNet model card](https://huggingface.co/opencv/face_detection_yunet)."
-7. A. S. Hasban et al., "[Face recognition for Student Attendance using Raspberry Pi](https://update.library.uitm.edu.my/Record/2-s2.0-85082462343/Description)," IEEE APACE, 2019.
-8. "[Class attendance management system using face recognition](https://cendekia.unisza.edu.my/neuaxis-e/Record/iium-70809/Details)," IIUM.
-9. R. Bin Hamed, T. Fatnassi, "[A Secure Attendance System using Raspberry Pi Face Recognition](https://jtde.telsoc.org/index.php/jtde/article/view/530)," *Journal of Telecommunications and the Digital Economy*.
-10. INEX, "[LeafHAT บอร์ด GPIO สำหรับ Raspberry Pi](https://inex.co.th/home/product/leafhat-gpio/)."
-11. Raspberry Pi Ltd, "[Raspberry Pi 15W USB-C Power Supply](https://raspberrypi.com/products/type-c-power-supply)."
